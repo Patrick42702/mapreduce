@@ -78,6 +78,19 @@ void *mapper_worker(work_queue_t *work_queue) {
 void sort_partition() {
   for (int i = 0; i < num_partitions; i++) {
     part_col_t *part = &partition_table[i];
+    kv_t *arr = part->partition_arr;
+
+    for (int j = 1; j < part->curr_size; j++) {
+      kv_t curr_kv = arr[j];
+      char *key = arr[j].key;
+      int k = j - 1;
+
+      while (k >= 0 && strcmp(arr[k].key, key) > 0) {
+        arr[k + 1] = arr[k];
+        k = k - 1;
+      }
+      arr[k + 1] = curr_kv;
+    }
   }
 }
 
