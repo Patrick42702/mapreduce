@@ -1,4 +1,3 @@
-#include "mapreduce.c"
 #include "mapreduce.h"
 #include <assert.h>
 #include <stdio.h>
