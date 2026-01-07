@@ -37,6 +37,8 @@ void allocate_partition_table(int num_reducers);
 
 void resize_partition(int partition);
 
+void sort_partitions();
+
 // External functions: these are what you must define
 void MR_Emit(char *key, char *value);
 

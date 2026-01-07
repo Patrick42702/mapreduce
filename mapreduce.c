@@ -1,12 +1,15 @@
 #include "mapreduce.h"
 #include <assert.h>
 #include <pthread.h>
+#include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 part_col_t *partition_table;
 Partitioner part_func;
 int num_partitions;
+Reducer reduce_glob;
 
 char *get_next(char *key, int parition_num) {
   part_col_t *part = &partition_table[parition_num];
@@ -38,32 +41,30 @@ void MR_Emit(char *key, char *value) {
   }
 
   kv_t *curr_kv = &(curr_part->partition_arr[curr_part->curr_size]);
-  curr_kv->key = key;
-  curr_kv->value = value;
+  curr_kv->key = strdup(key);
+  curr_kv->value = strdup(value);
   curr_part->curr_size++;
   pthread_mutex_unlock(&curr_part->lock);
 }
 
-unsigned long MR_DefaultHashPartition(char *key, int num_partitions) {
+unsigned long MR_DefaultHashPartition(char *key, int partition_count) {
   unsigned long hash = 5381;
   int c;
   while ((c = *key++) != '\0')
     hash = hash * 33 + c;
-  return hash % num_partitions;
+  return hash % partition_count;
 }
 
 void *mapper_worker(work_queue_t *work_queue) {
   // grab lock, grab file name, increment counter,
   // unlock, call map()
   while (1) {
-
+    pthread_mutex_lock(&work_queue->lock);
     // we processed all files
-    if (work_queue->num_files < work_queue->next_file_idx) {
+    if (work_queue->num_files <= work_queue->next_file_idx) {
       pthread_mutex_unlock(&work_queue->lock);
       break;
     }
-
-    pthread_mutex_lock(&work_queue->lock);
 
     char *file_name = work_queue->files[work_queue->next_file_idx];
     work_queue->next_file_idx++;
@@ -75,7 +76,18 @@ void *mapper_worker(work_queue_t *work_queue) {
   return NULL;
 }
 
-void sort_partition() {
+void *reduce_worker(void *i) {
+  int partition_num = *(int *)i;
+  free(i);
+  part_col_t *part = &partition_table[partition_num];
+  while (part->iter_idx < part->curr_size) {
+    char *key = part->partition_arr[part->iter_idx].key;
+    reduce_glob(key, get_next, partition_num);
+  }
+  return NULL;
+}
+
+void sort_partitions() {
   for (int i = 0; i < num_partitions; i++) {
     part_col_t *part = &partition_table[i];
     kv_t *arr = part->partition_arr;
@@ -134,12 +146,12 @@ void resize_partition(int partition) {
 
 void MR_Run(int argc, char *argv[], Mapper map, int num_mappers, Reducer reduce,
             int num_reducers, Partitioner partition) {
-
   part_func = partition;
   num_partitions = num_reducers;
+  reduce_glob = reduce;
 
   work_queue_t mapper_queue = {
-      .files = &argv[1], .num_files = argc, .next_file_idx = 1, .map = map};
+      .files = &argv[1], .num_files = argc - 1, .next_file_idx = 0, .map = map};
 
   int rc = pthread_mutex_init(&mapper_queue.lock, NULL);
   assert(rc == 0);
@@ -148,12 +160,29 @@ void MR_Run(int argc, char *argv[], Mapper map, int num_mappers, Reducer reduce,
 
   allocate_partition_table(num_reducers);
 
+  // begin mapping
   for (int i = 0; i < num_mappers; i++) {
     pthread_create(&mapper_threads[i], NULL, (void *)mapper_worker,
                    &mapper_queue);
   }
 
+  // wait for mapping to complete
   for (int i = 0; i < num_mappers; i++) {
     pthread_join(mapper_threads[i], NULL);
+  }
+
+  // All files mapped, now sort partitions
+  sort_partitions();
+
+  pthread_t reduce_threads[num_reducers];
+
+  for (int i = 0; i < num_reducers; i++) {
+    int *arg = malloc(sizeof(int));
+    *arg = i;
+    pthread_create(&reduce_threads[i], NULL, (void *)reduce_worker, arg);
+  }
+
+  for (int i = 0; i < num_reducers; i++) {
+    pthread_join(reduce_threads[i], NULL);
   }
 }
