@@ -16,7 +16,12 @@ typedef struct {
   pthread_mutex_t lock;
 } work_queue_t;
 
-void *mapper_worker(work_queue_t *work_queue);
+typedef struct {
+  work_queue_t *map_queue;
+  int thread_id;
+} mapper_args_t;
+
+void *mapper_worker(mapper_args_t *mapper_args);
 
 typedef struct {
   char *key;
@@ -33,11 +38,11 @@ typedef struct {
   kv_t *partition_arr;
 } part_col_t;
 
-void allocate_partition_table(int num_reducers);
+void allocate_partition_table(int num_reducers, int num_mappers);
 
-void resize_partition(int partition);
+void resize_partition(int partition, int mapper);
 
-void sort_partitions();
+void sort_partitions(int num_mappers);
 
 // External functions: these are what you must define
 void MR_Emit(char *key, char *value);
