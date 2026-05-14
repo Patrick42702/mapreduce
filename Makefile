@@ -1,6 +1,6 @@
 # Compiler and flags
 CC = gcc
-CFLAGS = -Wall -Wextra -Wshadow -Wconversion -pthread -g -fsanitize=address
+CFLAGS = -Wall -Wextra -Wshadow -Wconversion -pthread -g
 
 # ======================
 # Main MapReduce program

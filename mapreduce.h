@@ -38,11 +38,13 @@ typedef struct {
   kv_t *partition_arr;
 } part_col_t;
 
-void allocate_partition_table(int num_reducers, int num_mappers);
+void allocate_partition_table();
+
+void allocate_master_ptable();
 
 void resize_partition(int partition, int mapper);
 
-void sort_partitions(int num_mappers);
+void sort_partitions();
 
 // External functions: these are what you must define
 void MR_Emit(char *key, char *value);
